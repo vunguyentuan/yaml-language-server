@@ -37,6 +37,18 @@ export interface JSONSchema {
 	anyOf?: JSONSchema[];
 	allOf?: JSONSchema[];
 	oneOf?: JSONSchema[];
+	// schema draft 06
+	const?: any;
+	contains?: JSONSchema;
+	propertyNames?: JSONSchema;
+	examples?: any[];
+
+	// schema draft 07
+	$comment?: string;
+	if?: JSONSchema;
+	then?: JSONSchema;
+	else?: JSONSchema;
+
 	not?: JSONSchema;
 	enum?: any[];
 	format?: string;

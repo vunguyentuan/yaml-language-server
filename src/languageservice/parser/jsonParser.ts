@@ -12,7 +12,6 @@ import * as objects from '../utils/objects';
 import * as nls from 'vscode-nls';
 import { LanguageSettings } from '../yamlLanguageService';
 const localize = nls.loadMessageBundle();
-
 export interface IRange {
 	start: number;
 	end: number;
@@ -243,6 +242,38 @@ export class ASTNode {
 			testAlternatives(schema.oneOf, true);
 		}
 
+		let testBranch = (schema: JSONSchema) => {
+			let subValidationResult = new ValidationResult();
+			let subMatchingSchemas = matchingSchemas.newSub();
+
+			this.validate(schema, subValidationResult, subMatchingSchemas);
+
+			validationResult.merge(subValidationResult);
+			validationResult.propertiesMatches += subValidationResult.propertiesMatches;
+			validationResult.propertiesValueMatches += subValidationResult.propertiesValueMatches;
+			matchingSchemas.merge(subMatchingSchemas);
+		};
+
+		let testCondition = (ifSchema: JSONSchema, thenSchema?: JSONSchema, elseSchema?: JSONSchema) => {
+			let subValidationResult = new ValidationResult();
+			let subMatchingSchemas = matchingSchemas.newSub();
+
+			this.validate(ifSchema, subValidationResult, subMatchingSchemas);
+			matchingSchemas.merge(subMatchingSchemas);
+
+			if (!subValidationResult.hasProblems()) {
+				if (thenSchema) {
+					testBranch(thenSchema);
+				}
+			} else if (elseSchema) {
+				testBranch(elseSchema);
+			}
+		};
+
+		if (schema.if) {
+			testCondition(schema.if, schema.then, schema.else);
+		}
+
 		if (Array.isArray(schema.enum)) {
 			let val = this.getValue();
 			let enumValueMatch = false;
@@ -259,9 +290,25 @@ export class ASTNode {
 					location: { start: this.start, end: this.end },
 					severity: ProblemSeverity.Warning,
 					code: ErrorCode.EnumValueMismatch,
-					message: schema.errorMessage || localize('enumWarning', 'Value is not accepted. Valid values: {0}.', schema.enum.map(v => JSON.stringify(v)).join(', '))
+					message: schema.errorMessage || localize('enumWarning', 'Value is not accepted. Valid values: {0}.', schema.enum.map(v => JSON.stringify(v)).join('\n'))
 				});
 			}
+		}
+
+		if (schema.const) {
+			let val = this.getValue();
+			if (!objects.equals(val, schema.const)) {
+				validationResult.problems.push({
+					location: { start: this.start, end: this.end },
+					severity: ProblemSeverity.Warning,
+					code: ErrorCode.EnumValueMismatch,
+					message: schema.errorMessage || localize('constWarning', 'Value must be {0}.', JSON.stringify(schema.const))
+				});
+				validationResult.enumValueMatch = false;
+			} else {
+				validationResult.enumValueMatch = true;
+			}
+			validationResult.enumValues = [schema.const];
 		}
 
 		if (schema.deprecationMessage && this.parent) {
